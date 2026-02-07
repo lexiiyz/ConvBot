@@ -1,0 +1,6 @@
+groq
+speech-recognition
+AppOpener
+edge-tts
+pygame
+python-dotenv
