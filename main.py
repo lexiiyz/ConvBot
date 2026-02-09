@@ -118,8 +118,6 @@ def listen_mic():
             if len(text_result) < 3: return None
 
             for blocked in HALLUCINATION_FILTER:
-                # Cek apakah seluruh teks SAMA PERSIS dengan filter (biar gak salah tangkap)
-                # Atau kalau mau strict: if blocked in text_result.lower() (tapi hati-hati)
                 if blocked == text_result.lower():
                     print(f"🗑️ Filtered Noise: '{text_result}'")
                     return None
@@ -197,10 +195,18 @@ async def main():
                         pywhatkit.playonyt(content)
                     
                     elif "spotify" in target:
-                        if os.name == 'nt':
-                            os.system(f'start spotify:search:"{content}"')
-                        else:
-                            webbrowser.open(f"spotify:search:{content}")
+                        print(f"🎵 Opening Spotify: {content}")
+                        try:
+                            open_app("Spotify", match_closest=True)
+                            await asyncio.sleep(2)  
+                            if os.name == 'nt':
+                                os.system(f'start spotify:search:"{content}"')
+                            else:
+                                webbrowser.open(f"spotify:search:{content}")
+                        except:
+                            # Fallback: buka Spotify web
+                            print("⚠️ Gagal akses desktop. Membuka Spotify Web...")
+                            webbrowser.open(f"https://open.spotify.com/search/{content}")
 
                 elif category == "web":
                     if not target.startswith("http"): target = f"https://{target}"
