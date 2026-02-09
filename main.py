@@ -10,7 +10,10 @@ from datetime import datetime
 import pygame
 import subprocess
 from dotenv import load_dotenv
+import pywhatkit
+import winsound
 
+# --- 1. SETUP AUDIO & ENV ---
 try:
     pygame.mixer.init()
 except pygame.error:
@@ -20,12 +23,13 @@ load_dotenv()
 
 API_KEY = os.getenv("GROQ_API_KEY")
 
-# Validasi Key
 if not API_KEY or "gsk_" not in API_KEY:
     print("❌ ERROR: API Key tidak valid. Cek file .env kamu!")
     exit()
 
 client = Groq(api_key=API_KEY)
+
+# --- 2. CONFIGURATION ---
 
 SYSTEM_PROMPT = """
 You are ConvBot. Current time: {time}
@@ -45,12 +49,19 @@ Rules:
 - REPLY: Short conversational Indonesian.
 """
 
+# [FIX] Hapus kata 'video', 'watching', 'by' karena itu kata umum
+HALLUCINATION_FILTER = [
+    "terima kasih", "thank you", "subtitle", "copyright", 
+    "amara.org", "subtitles", "caption"
+]
+
+# --- 3. FUNCTIONS ---
+
 async def speak(text):
     """Mouth: EdgeTTS + Pygame"""
     print(f"🗣️  ConvBot: {text}")
     filename = "temp_voice.mp3"
     
-    # Hapus file lama (biar gak error permission)
     if os.path.exists(filename):
         try:
             pygame.mixer.music.unload()
@@ -74,31 +85,50 @@ async def speak(text):
         print(f"Error Speak: {e}")
 
 def listen_mic():
-    """Ear: Whisper (Adaptive Listening)"""
+    """Ear: Whisper + Feedback Beep + Anti-Hallucination"""
     r = sr.Recognizer()
     with sr.Microphone() as source:
-        print("\nListening... ")
-
-        r.dynamic_energy_threshold = True
-        r.pause_threshold = 1.0  
+        print("\n🔔 [TING] Silakan ngomong...")
+        winsound.Beep(1000, 200) # Nada Tinggi (Start)
         
-        r.adjust_for_ambient_noise(source, duration=0.5)
+        r.dynamic_energy_threshold = True
+        r.energy_threshold = 2000 
+        r.pause_threshold = 0.8 
         
         try:
-            audio = r.listen(source, timeout=None) 
-            print("Thinking...")
+            audio = r.listen(source, timeout=None)
             
+            print("🔒 [TUNG] Memproses...")
+            winsound.Beep(700, 200) # Nada Rendah (Stop)
+
             with open("temp_input.wav", "wb") as f:
                 f.write(audio.get_wav_data())
             
             with open("temp_input.wav", "rb") as file:
                 transcription = client.audio.transcriptions.create(
-                    file=(file.name, file.read()), model="whisper-large-v3", language="id"
+                    file=(file.name, file.read()), 
+                    model="whisper-large-v3", 
+                    language="id"
                 )
-            return transcription.text
+            
+            text_result = transcription.text.strip()
+            
+            # --- FILTER HALUSINASI ---
+            if not text_result: return None
+            if len(text_result) < 3: return None
+
+            for blocked in HALLUCINATION_FILTER:
+                # Cek apakah seluruh teks SAMA PERSIS dengan filter (biar gak salah tangkap)
+                # Atau kalau mau strict: if blocked in text_result.lower() (tapi hati-hati)
+                if blocked == text_result.lower():
+                    print(f"🗑️ Filtered Noise: '{text_result}'")
+                    return None
+
+            return text_result
+
         except sr.WaitTimeoutError:
             return None 
-        except Exception:
+        except Exception as e:
             return None
 
 def brain_process(text):
@@ -129,22 +159,31 @@ def control_system(command):
     except Exception as e:
         print(f"Error Sys: {e}")
 
+# --- 4. MAIN LOOP ---
+
 async def main():
-    print("ConvBot - READY")
+    print("🔥 JARVIS REBORN - READY")
+    print("Tunggu bunyi 'TING' baru ngomong.")
     print("Tip: Bilang 'Stop' atau 'Cukup' untuk mematikan.")
     
     while True:
         try:
+            # 1. DENGAR
             user_text = listen_mic()
             if not user_text: continue
 
+            # 2. MIKIR
             data = brain_process(user_text)
 
+            # 3. BERTINDAK
+            
+            # Cek Close
             if data["type"] == "close":
                 await speak(data["reply"])
                 print("👋 Bye! (Voice Stop)")
                 break
 
+            # Cek Action
             if data["type"] == "action":
                 target = data["target"].lower()
                 content = data.get("content", "")
@@ -154,8 +193,8 @@ async def main():
 
                 if category == "playback":
                     if "youtube" in target:
-                        query = content.replace(" ", "+")
-                        webbrowser.open(f"https://www.youtube.com/results?search_query={query}")
+                        print(f"🎬 Auto-Playing YouTube: {content}")
+                        pywhatkit.playonyt(content)
                     
                     elif "spotify" in target:
                         if os.name == 'nt':
@@ -179,6 +218,7 @@ async def main():
                         control_system(target)
                         await asyncio.sleep(4)
 
+            # Cek Reply
             if "reply" in data and data["reply"]:
                 await speak(data["reply"])
             
