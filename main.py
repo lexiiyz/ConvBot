@@ -12,6 +12,7 @@ import subprocess
 from dotenv import load_dotenv
 import pywhatkit
 import winsound
+import keyboard
 
 # --- 1. SETUP AUDIO & ENV ---
 try:
@@ -166,7 +167,11 @@ async def main():
     
     while True:
         try:
-            # 1. DENGAR
+            # 1. TUNGGU TRIGGER (SPACE)
+            print("\n⏳ Tekan SPASI untuk mulai ngomong...")
+            keyboard.wait('space')
+            
+            # 2. DENGAR
             user_text = listen_mic()
             if not user_text: continue
 
